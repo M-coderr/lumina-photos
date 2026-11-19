@@ -1,0 +1,132 @@
+================================================================================
+                    LUMINA PHOTOS - PROJECT CHECKPOINT
+                     (Google Photos Self-Hosted Clone)
+================================================================================
+Timestamp: 2026-11-19
+Repository: https://github.com/M-coderr/lumina-photos
+Branch: main
+Server Status: RUNNING (http://localhost:8000)
+
+--------------------------------------------------------------------------------
+1. COMPLETED TASKS & DELIVERABLES
+--------------------------------------------------------------------------------
+
+[✔] Architecture & Product Strategy
+    - Zero-Knowledge Architecture designed: Users' photos, videos, and databases
+      stay 100% private on their local PC. The creator never touches user files.
+    - Remote connection & pairing strategy designed (mDNS / QR Code pairing /
+      tunnel relay).
+    - Monetization & licensing strategy defined (Free Tier, Pro Monthly $3.99,
+      Pro Yearly $35, Lifetime $89 with central kill-switch).
+
+[✔] PC Core Server Engine (Python / FastAPI / SQLite WAL)
+    - High-performance SQLite database with Write-Ahead Logging (WAL mode) and
+      optimized indexes on taken_at, file_hash, is_favorite, is_trashed.
+    - Media processing pipeline:
+      * Auto-orientation correction via EXIF orientation tags.
+      * Fast multi-tier WebP thumbnail generation:
+        - 240px micro-thumbnails (~15KB) for infinite timeline scrolling.
+        - 1600px preview-thumbnails (~150KB) for instant lightbox viewing.
+      * EXIF extraction: Camera Make/Model, Lens, Aperture, Shutter Speed,
+        ISO, Focal Length, Date Taken.
+      * GPS coordinates parser (DMS to decimal degrees) with map integration.
+      * SHA-256 deduplication: Prevents duplicate files and saves PC disk space.
+    - Real-time Folder Watcher (watchdog):
+      * File-system observer monitors selected PC folders (e.g. data/sample_photos).
+      * Debounced file-write stability verification.
+      * Auto-detects, auto-processes, and auto-indexes newly dropped photos.
+    - Real-Time WebSockets (/ws):
+      * Broadcasts photo_added events live to all open desktop and mobile clients.
+    - The Switch / Licensing Service:
+      * Supports ACTIVE, TRIAL, PAUSED, and EXPIRED statuses.
+      * Blocks write/upload operations when paused/expired, while keeping
+        existing photo library safe and readable for the user.
+    - Outbound Tunnel & Pairing Service:
+      * Auto-detects local LAN IP.
+      * Generates base64 QR Code and connection credentials for 1-click pairing.
+    - Full REST API:
+      * /api/photos (timeline, pagination, filters, month/year dates)
+      * /api/photos/{id}/thumbnail/{size} (WebP caching headers)
+      * /api/photos/{id}/file (original media streaming)
+      * /api/photos/{id}/favorite & /trash (starring & soft-delete)
+      * /api/upload (chunked multipart upload with license check)
+      * /api/folders (watched folder registration, live watch, manual scan)
+      * /api/albums (custom collections & cover photo management)
+      * /api/system/stats & /api/system/admin/switch (system metrics & switch toggle)
+
+[✔] Desktop Web Interface (React 19 / Vite / Tailwind CSS v4)
+    - Exact Google Photos aesthetic and layout:
+      * Justified timeline grid with sticky date headers ("Today", "Yesterday").
+      * Timeline scrubber bar on the right edge for jumping by year and month.
+      * Fullscreen Lightbox viewer with keyboard controls (Arrows, Escape).
+      * Slide-out EXIF Inspector with Camera specs and Google Maps location link.
+      * Batch actions bar (multi-select, add to album, move to trash, delete).
+      * Watched Folders management view with live watch badges and scan trigger.
+      * Custom Albums view with photo collections.
+      * Drag-and-drop file upload anywhere on the window.
+      * Mobile Pairing Modal with live QR code display.
+      * Admin Switch & Monetization Modal: Interactive test controller to toggle
+        Active, Trial, Paused, and Expired states with live paywall warning banners.
+    - Compiled into web/dist and served directly by the FastAPI backend on port 8000.
+
+[✔] Companion Mobile Client (React Native / Expo)
+    - Full mobile app codebase in mobile/.
+    - Background sync worker (syncWorker.js) using expo-media-library and
+      expo-file-system.
+    - Auto-detection of new photos taken in Camera roll, WhatsApp, and Screenshots.
+    - One-click pairing with PC server via QR code scanner and manual IP fallback.
+    - Mobile Google Photos grid with pull-to-refresh and offline cache.
+    - Fullscreen photo viewer with metadata overlay.
+
+[✔] Devops, Version Control & Tooling
+    - Initialized Git repository on main branch.
+    - Created production .gitignore (protects .venv, node_modules, and user data).
+    - Single-click Windows launcher (start_lumina.bat).
+    - Comprehensive README.md guide.
+    - Created and pushed to remote GitHub repo:
+      https://github.com/M-coderr/lumina-photos
+
+--------------------------------------------------------------------------------
+2. PENDING TASKS & UPCOMING ROADMAP
+--------------------------------------------------------------------------------
+
+[ ] Phase 1: Native Windows Desktop App Packaging (Plug & Play Distribution)
+    - Package PC Server into a single executable (.exe) using PyInstaller or Tauri.
+    - Build Windows System Tray icon (pystray) with:
+      * "Open Web Dashboard"
+      * "Show Pairing QR Code"
+      * "Paused / Active Status indicator"
+      * "Quit"
+    - Add Windows installer (.msi or Inno Setup) with auto-start on boot option.
+
+[ ] Phase 2: Remote Connection & Cloud Relay Infrastructure
+    - Integrate embedded zero-config tunnel (Cloudflare Tunnel daemon / Bore)
+      so non-technical users get an automatic private HTTPS link
+      (e.g., https://<user-id>.luminaphotos.live) without port-forwarding.
+    - UPnP / NAT-PMP fallback for routers that support direct port opening.
+
+[ ] Phase 3: Central Licensing & Monetization Backend (Cloud)
+    - Deploy central SaaS licensing API:
+      * Stripe / LemonSqueezy payment webhooks.
+      * Issue cryptographically signed license tokens (Ed25519) to PC apps.
+      * Web dashboard for the creator to monitor active servers and toggle
+        the "Switch" on any user account.
+
+[ ] Phase 4: Mobile App Store Packaging (Android & iOS)
+    - Generate Android production build (.apk / .aab) via Expo EAS Build.
+    - Implement native Android WorkManager foreground service for scheduled
+      overnight Wi-Fi background backup.
+    - Submit to Google Play Store & Apple App Store.
+
+[ ] Phase 5: Smart AI Features (Offline & Private on PC)
+    - Local Semantic Natural Language Search (OpenCLIP):
+      * Search by scene descriptions ("beach sunset", "receipts", "dog running")
+        without internet or cloud APIs.
+    - Offline Facial Recognition & People Clustering (InsightFace):
+      * Cluster faces into private people albums.
+    - Interactive World Map View:
+      * Leaflet / OpenStreetMap view clustering photos by GPS pins.
+    - FFmpeg Video Transcoding:
+      * Transcode large 4K 60fps phone videos into smooth web-streamable HLS/MP4.
+
+================================================================================
