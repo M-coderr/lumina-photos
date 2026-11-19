@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Lumina Photos",
+    "slug": "lumina-photos",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#171717"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Lumina Photos needs access to your photos to automatically back them up to your home PC server.",
+        "NSCameraUsageDescription": "Lumina Photos needs camera access to scan the pairing QR code on your PC screen."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#171717"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "READ_EXTERNAL_STORAGE",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ]
+    }
+  }
+}

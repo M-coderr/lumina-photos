@@ -1,0 +1,43 @@
+# Virtual environment
+.venv/
+env/
+venv/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Node & dependencies
+node_modules/
+web/node_modules/
+mobile/node_modules/
+.npm/
+
+# Build artifacts
+web/dist/
+.expo/
+*.apk
+*.aab
+
+# Local data & storage (users' personal photos & database)
+data/originals/
+data/thumbnails/
+data/sample_photos/
+data/test/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/.secret
+data/.pair_token
+data/config.json
+scratch/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
