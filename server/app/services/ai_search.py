@@ -64,6 +64,8 @@ class AISearchService:
                 inputs = processor(images=rgb_img, return_tensors="pt")
                 with torch.no_grad():
                     image_features = model.get_image_features(**inputs)
+                    if hasattr(image_features, "pooler_output"):
+                        image_features = image_features.pooler_output
                     # Normalize vector
                     image_features = image_features / image_features.norm(dim=-1, keepdim=True)
                     embedding_np = image_features.cpu().numpy()[0]
@@ -84,6 +86,8 @@ class AISearchService:
             inputs = processor(text=[text], return_tensors="pt", padding=True)
             with torch.no_grad():
                 text_features = model.get_text_features(**inputs)
+                if hasattr(text_features, "pooler_output"):
+                    text_features = text_features.pooler_output
                 text_features = text_features / text_features.norm(dim=-1, keepdim=True)
                 return text_features.cpu().numpy()[0]
         except Exception as e:
