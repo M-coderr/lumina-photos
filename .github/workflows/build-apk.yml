@@ -1,0 +1,74 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Compile Android APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies in mobile
+        run: |
+          cd mobile
+          npm ci --legacy-peer-deps
+
+      - name: Build Android APK with Gradle
+        run: |
+          cd mobile/android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Rename APK
+        run: |
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk LuminaPhotos.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LuminaPhotos-Android-APK
+          path: LuminaPhotos.apk
+
+      - name: Release APK
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0-apk
+          name: "Lumina Photos Android APK v1.0.0"
+          body: |
+            ### 📱 Lumina Photos Android App (.apk)
+            
+            **How to install on your Android phone:**
+            1. Download `LuminaPhotos.apk` below directly to your phone.
+            2. Tap the downloaded file to install (allow "Install from unknown sources" if prompted).
+            3. Open the app and tap **"📷 Scan PC Screen QR Code"** to pair with your PC!
+          files: LuminaPhotos.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
