@@ -2,8 +2,8 @@ import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
 
 from server.app.core.config import ORIGINALS_DIR
 from server.app.core.database import get_db, row_to_dict
@@ -18,10 +18,15 @@ from server.app.services.watcher import broadcast_event
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
 @router.post("")
-async def upload_files(files: List[UploadFile] = File(...)):
+async def upload_files(
+    files: Optional[List[UploadFile]] = File(None),
+    file: Optional[UploadFile] = File(None),
+    filename: Optional[str] = Form(None),
+):
     """
     Upload one or multiple photos/videos from Mobile App or Web UI.
     Enforces license switch, checks deduplication, generates thumbnails, and notifies clients.
+    Accepts field names 'files' or 'file', handles missing extensions via MIME or magic bytes.
     """
     # Check license switch
     if not licensing_service.is_operational():
@@ -30,29 +35,67 @@ async def upload_files(files: List[UploadFile] = File(...)):
             detail="Server is paused or subscription has expired. Please renew to resume uploads."
         )
 
+    upload_list = []
+    if files:
+        upload_list.extend(files)
+    if file:
+        upload_list.append(file)
+    if not upload_list:
+        raise HTTPException(status_code=400, detail="No files provided for upload.")
+
     results = []
     now = datetime.now(timezone.utc)
     target_dir = ORIGINALS_DIR / str(now.year) / f"{now.month:02d}"
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    for upload in files:
-        ext = Path(upload.filename).suffix.lower()
+    for upload in upload_list:
+        orig_name = filename or upload.filename or "upload.jpg"
+        ext = Path(orig_name).suffix.lower()
+
+        # Handle missing or unrecognized extension from mobile content URIs
         if ext not in SUPPORTED_EXTENSIONS:
-            results.append({
-                "filename": upload.filename,
-                "status": "error",
-                "detail": f"Unsupported format '{ext}'"
-            })
-            continue
+            content_type = (upload.content_type or "").lower()
+            if "jpeg" in content_type or "jpg" in content_type:
+                ext = ".jpg"
+            elif "png" in content_type:
+                ext = ".png"
+            elif "webp" in content_type:
+                ext = ".webp"
+            elif "heic" in content_type:
+                ext = ".heic"
+            elif "mp4" in content_type:
+                ext = ".mp4"
+            elif "mov" in content_type or "quicktime" in content_type:
+                ext = ".mov"
+            else:
+                ext = ".jpg"  # default fallback for camera uploads
+
+            if not orig_name.endswith(ext):
+                orig_name = f"{orig_name}{ext}"
 
         # Save to temp location first to compute hash
         temp_id = str(uuid.uuid4())
-        safe_name = f"{temp_id}_{upload.filename}"
+        safe_name = f"{temp_id}_{orig_name}"
         final_path = target_dir / safe_name
 
         try:
             with open(final_path, "wb") as buffer:
                 shutil.copyfileobj(upload.file, buffer)
+
+            # Auto-detect real format from magic bytes if needed
+            try:
+                with open(final_path, "rb") as check_f:
+                    magic = check_f.read(16)
+                if magic.startswith(b"\xff\xd8\xff") and not final_path.suffix.lower() in [".jpg", ".jpeg"]:
+                    new_path = final_path.with_suffix(".jpg")
+                    final_path.rename(new_path)
+                    final_path = new_path
+                elif magic.startswith(b"\x89PNG") and final_path.suffix.lower() != ".png":
+                    new_path = final_path.with_suffix(".png")
+                    final_path.rename(new_path)
+                    final_path = new_path
+            except Exception:
+                pass
 
             # Compute SHA-256 for deduplication
             file_hash = calculate_file_hash(final_path)
@@ -69,7 +112,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
                     except Exception:
                         pass
                     results.append({
-                        "filename": upload.filename,
+                        "filename": orig_name,
                         "status": "duplicate",
                         "photo": row_to_dict(existing)
                     })
@@ -96,7 +139,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
 
             broadcast_event("photo_added", record)
             results.append({
-                "filename": upload.filename,
+                "filename": orig_name,
                 "status": "success",
                 "photo": record
             })
@@ -108,7 +151,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
                 except Exception:
                     pass
             results.append({
-                "filename": upload.filename,
+                "filename": orig_name,
                 "status": "error",
                 "detail": str(e)
             })

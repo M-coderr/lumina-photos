@@ -99,6 +99,9 @@ export class MobileSyncEngine {
           httpMethod: 'POST',
           uploadType: FileSystem.FileSystemUploadType.MULTIPART,
           fieldName: 'files',
+          parameters: {
+            filename: asset.filename || 'photo.jpg',
+          },
           headers: {
             Authorization: `Bearer ${config.token}`,
           },
@@ -117,6 +120,8 @@ export class MobileSyncEngine {
         } else if (response.status === 402) {
           console.warn('[Sync] Server switch paused/expired.');
           return { status: 'server_paused' };
+        } else {
+          console.warn(`[Sync] Upload returned HTTP ${response.status}:`, response.body);
         }
       } catch (err) {
         console.error(`[Sync] Failed to upload ${asset.filename}:`, err);

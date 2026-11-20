@@ -44,7 +44,10 @@ export default function App() {
     const config = await MobileSyncEngine.getServerConfig();
     if (config.serverUrl) {
       setPairedServer(config.serverUrl);
-      loadTimeline(config.serverUrl);
+      await loadTimeline(config.serverUrl);
+      if (config.autoSync) {
+        handleSyncNow();
+      }
     } else {
       setIsPairModalOpen(true);
     }
@@ -77,6 +80,12 @@ export default function App() {
         await loadTimeline();
       } else if (res.status === 'up_to_date') {
         setSyncStatus({ text: 'All photos are up to date on your PC!' });
+      } else if (res.status === 'permission_denied') {
+        setSyncStatus({ text: '⚠️ Photo permission denied' });
+        Alert.alert(
+          'Photo Permission Needed',
+          'Please allow Lumina Photos access to your photos in Android Settings to backup your camera roll.'
+        );
       } else if (res.status === 'server_paused') {
         setSyncStatus({ text: 'Server paused by licensing switch.' });
       }
@@ -107,8 +116,10 @@ export default function App() {
         setIsPairModalOpen(false);
         await MobileSyncEngine.pairWithServer(url, token);
         setPairedServer(url);
-        Alert.alert('Connected!', `Paired successfully with your PC server at:\n${url}`);
+        Alert.alert('Connected!', `Paired successfully with your PC server at:\n${url}\n\nStarting camera roll backup...`);
         await loadTimeline(url);
+        // Automatically start syncing immediately upon pairing
+        handleSyncNow();
       }
     } catch (err) {
       console.log('QR parse error:', err);
