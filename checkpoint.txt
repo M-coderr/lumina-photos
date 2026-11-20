@@ -2,10 +2,9 @@
                     LUMINA PHOTOS - PROJECT CHECKPOINT
                      (Google Photos Self-Hosted Clone)
 ================================================================================
-Timestamp: 2026-11-19
+Timestamp: 2026-11-20
 Repository: https://github.com/M-coderr/lumina-photos
 Branch: main
-Server Status: RUNNING (http://localhost:8000)
 
 --------------------------------------------------------------------------------
 1. COMPLETED TASKS & DELIVERABLES
@@ -44,15 +43,46 @@ Server Status: RUNNING (http://localhost:8000)
     - Outbound Tunnel & Pairing Service:
       * Auto-detects local LAN IP.
       * Generates base64 QR Code and connection credentials for 1-click pairing.
-    - Full REST API:
-      * /api/photos (timeline, pagination, filters, month/year dates)
-      * /api/photos/{id}/thumbnail/{size} (WebP caching headers)
-      * /api/photos/{id}/file (original media streaming)
-      * /api/photos/{id}/favorite & /trash (starring & soft-delete)
-      * /api/upload (chunked multipart upload with license check)
-      * /api/folders (watched folder registration, live watch, manual scan)
-      * /api/albums (custom collections & cover photo management)
-      * /api/system/stats & /api/system/admin/switch (system metrics & switch toggle)
+
+[✔] Desktop Windows App & System Tray (Option 1)
+    - Built desktop_app.py: Runs the FastAPI server silently on a background thread.
+    - Windows System Tray icon (pystray) near the taskbar clock.
+    - Right-click tray menu:
+      * "Open Lumina Photos" (opens browser dashboard)
+      * "Pair Mobile App (QR Code)"
+      * "Manage Watched Folders"
+      * "Status: Active / Paused"
+      * "Start with Windows" (auto-start registry integration in HKCU\...\Run)
+      * "Quit Lumina Photos"
+    - Silent launcher: start_lumina.bat runs pythonw.exe so no console terminal
+      window remains visible.
+    - Standalone executable build script (build_desktop_exe.py) using PyInstaller
+      with bundled React frontend assets.
+
+[✔] Mobile Client & Phone Testing Setup (Option 3)
+    - Full mobile app codebase in mobile/ (React Native / Expo).
+    - All 843 npm dependencies installed and verified.
+    - Background sync worker (syncWorker.js) using expo-media-library and
+      expo-file-system to monitor camera roll and upload photos to the PC.
+    - Interactive 1-click launcher start_mobile.bat to spin up Expo Metro
+      bundler and display terminal QR code for the Expo Go app.
+    - Google Photos mobile grid with pull-to-refresh, folder picker, and photo viewer.
+
+[✔] Zero-Config Remote Tunnel Integration (Option 2)
+    - Downloaded and verified standalone bin/cloudflared.exe (Zero admin needed).
+    - Automated lifecycle management in tunnel_service.py:
+      * Starts Cloudflare Quick Tunnel on demand without accounts or domain setups.
+      * Automatically captures public https://*.trycloudflare.com URL and valid SSL.
+      * Seamlessly updates pairing QR code so scanning it connects from 4G/5G.
+    - Integrated one-click "⚡ Turn ON Remote Access" toggle button in the web UI.
+
+[✔] Offline Local AI Semantic Search (Option 4)
+    - Installed PyTorch CPU (torch 2.15.0+cpu), transformers 5.23.0, and numpy.
+    - Created photo_embeddings database table for 512-dimensional vector storage.
+    - Built ai_search_service.py (CLIP model for zero-cloud local semantic search).
+    - Allows natural language queries ("sunset", "green forest", "beach", "city night")
+      to match photos by content rather than file names.
+    - Background indexing endpoint: /api/photos/ai/index-all.
 
 [✔] Desktop Web Interface (React 19 / Vite / Tailwind CSS v4)
     - Exact Google Photos aesthetic and layout:
@@ -64,64 +94,31 @@ Server Status: RUNNING (http://localhost:8000)
       * Watched Folders management view with live watch badges and scan trigger.
       * Custom Albums view with photo collections.
       * Drag-and-drop file upload anywhere on the window.
-      * Mobile Pairing Modal with live QR code display.
+      * Mobile Pairing Modal with live QR code display and Remote Access toggle.
       * Admin Switch & Monetization Modal: Interactive test controller to toggle
         Active, Trial, Paused, and Expired states with live paywall warning banners.
     - Compiled into web/dist and served directly by the FastAPI backend on port 8000.
-
-[✔] Companion Mobile Client (React Native / Expo)
-    - Full mobile app codebase in mobile/.
-    - Background sync worker (syncWorker.js) using expo-media-library and
-      expo-file-system.
-    - Auto-detection of new photos taken in Camera roll, WhatsApp, and Screenshots.
-    - One-click pairing with PC server via QR code scanner and manual IP fallback.
-    - Mobile Google Photos grid with pull-to-refresh and offline cache.
-    - Fullscreen photo viewer with metadata overlay.
-
-[✔] Devops, Version Control & Tooling
-    - Initialized Git repository on main branch.
-    - Created production .gitignore (protects .venv, node_modules, and user data).
-    - Single-click Windows launcher (start_lumina.bat).
-    - Comprehensive README.md guide.
-    - Created and pushed to remote GitHub repo:
-      https://github.com/M-coderr/lumina-photos
 
 --------------------------------------------------------------------------------
 2. PENDING TASKS & UPCOMING ROADMAP
 --------------------------------------------------------------------------------
 
-[ ] Phase 1: Native Windows Desktop App Packaging (Plug & Play Distribution)
-    - Package PC Server into a single executable (.exe) using PyInstaller or Tauri.
-    - Build Windows System Tray icon (pystray) with:
-      * "Open Web Dashboard"
-      * "Show Pairing QR Code"
-      * "Paused / Active Status indicator"
-      * "Quit"
-    - Add Windows installer (.msi or Inno Setup) with auto-start on boot option.
+[ ] Phase 1: Native Windows Installer Generation
+    - Run build_desktop_exe.py to produce the standalone dist/LuminaPhotos/ folder.
+    - Optional Inno Setup / NSIS script to generate LuminaPhotosSetup.exe installer.
 
-[ ] Phase 2: Remote Connection & Cloud Relay Infrastructure
-    - Integrate embedded zero-config tunnel (Cloudflare Tunnel daemon / Bore)
-      so non-technical users get an automatic private HTTPS link
-      (e.g., https://<user-id>.luminaphotos.live) without port-forwarding.
-    - UPnP / NAT-PMP fallback for routers that support direct port opening.
-
-[ ] Phase 3: Central Licensing & Monetization Backend (Cloud)
+[ ] Phase 2: Central Cloud Licensing & Billing Server
     - Deploy central SaaS licensing API:
       * Stripe / LemonSqueezy payment webhooks.
       * Issue cryptographically signed license tokens (Ed25519) to PC apps.
       * Web dashboard for the creator to monitor active servers and toggle
         the "Switch" on any user account.
 
-[ ] Phase 4: Mobile App Store Packaging (Android & iOS)
+[ ] Phase 3: Mobile App Store Packaging (Android & iOS)
     - Generate Android production build (.apk / .aab) via Expo EAS Build.
-    - Implement native Android WorkManager foreground service for scheduled
-      overnight Wi-Fi background backup.
     - Submit to Google Play Store & Apple App Store.
 
-[ ] Phase 5: Smart AI Features (Offline & Private on PC)
-    - Local Semantic Natural Language Search (OpenCLIP):
-      * Search by scene descriptions ("beach sunset", "receipts", "dog running")
-        without internet or cloud APIs.
+[ ] Phase 4: Additional AI Features
     - Offline Facial Recognition & People Clustering (InsightFace):
       * Cluster faces into private people albums.
     - Interactive World Map View:

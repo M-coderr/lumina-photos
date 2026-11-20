@@ -1,12 +1,18 @@
 import io
 import json
+import os
+import re
 import socket
 import base64
+import subprocess
+import threading
+import time
+from pathlib import Path
 from typing import Dict, Any, Optional
 import qrcode
 from qrcode.image.pil import PilImage
 
-from server.app.core.config import SERVER_PORT, PAIRING_TOKEN, APP_NAME
+from server.app.core.config import SERVER_PORT, PAIRING_TOKEN, APP_NAME, BASE_DIR
 from server.app.core.database import get_db, row_to_dict
 
 def get_local_ip() -> str:
@@ -23,8 +29,24 @@ def get_local_ip() -> str:
     return ip
 
 class TunnelService:
-    @staticmethod
-    def get_status() -> Dict[str, Any]:
+    def __init__(self):
+        self.process: Optional[subprocess.Popen] = None
+        self.reader_thread: Optional[threading.Thread] = None
+        self.public_url: Optional[str] = None
+
+    def find_cloudflared_bin(self) -> Optional[Path]:
+        """Locate cloudflared binary in project bin or system paths."""
+        candidates = [
+            BASE_DIR / "bin" / "cloudflared.exe",
+            Path("C:/Program Files/cloudflared/cloudflared.exe"),
+            Path("C:/Program Files (x86)/cloudflared/cloudflared.exe"),
+        ]
+        for c in candidates:
+            if c.exists():
+                return c
+        return None
+
+    def get_status(self) -> Dict[str, Any]:
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM tunnel_state WHERE id = 'current';")
@@ -44,12 +66,13 @@ class TunnelService:
             "local_ip": local_ip,
             "local_url": local_url,
             "effective_url": effective_url,
+            "has_binary": self.find_cloudflared_bin() is not None,
             "pairing_token": PAIRING_TOKEN
         }
 
-    @staticmethod
-    def set_tunnel_url(public_url: Optional[str], provider: str = "cloudflare"):
+    def set_tunnel_url(self, public_url: Optional[str], provider: str = "cloudflare"):
         is_active = 1 if public_url else 0
+        self.public_url = public_url
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -60,9 +83,73 @@ class TunnelService:
             WHERE id = 'current';
             """, {"active": is_active, "provider": provider, "url": public_url})
 
-    @staticmethod
-    def generate_pairing_payload() -> Dict[str, Any]:
-        status = TunnelService.get_status()
+    def start_tunnel(self) -> Dict[str, Any]:
+        """Start Cloudflare Quick Tunnel in background."""
+        if self.process and self.process.poll() is None:
+            return self.get_status()
+
+        bin_path = self.find_cloudflared_bin()
+        if not bin_path:
+            raise FileNotFoundError("cloudflared binary not found. Place it in bin/cloudflared.exe")
+
+        cmd = [
+            str(bin_path),
+            "tunnel",
+            "--url", f"http://127.0.0.1:{SERVER_PORT}",
+            "--no-autoupdate"
+        ]
+
+        print(f"[Tunnel] Spawning Cloudflare Quick Tunnel for port {SERVER_PORT}...")
+        self.process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1
+        )
+
+        def reader():
+            url_pattern = re.compile(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com")
+            # Cloudflared outputs connection info on stderr
+            for line in self.process.stderr:
+                match = url_pattern.search(line)
+                if match:
+                    found_url = match.group(0)
+                    print(f"[Tunnel] Cloudflare Tunnel established: {found_url}")
+                    self.set_tunnel_url(found_url, "cloudflare")
+                    break
+
+        self.reader_thread = threading.Thread(target=reader, daemon=True)
+        self.reader_thread.start()
+
+        # Wait up to 5 seconds for URL discovery
+        for _ in range(10):
+            status = self.get_status()
+            if status.get("public_url"):
+                return status
+            time.sleep(0.5)
+
+        return self.get_status()
+
+    def stop_tunnel(self) -> Dict[str, Any]:
+        """Terminate the active tunnel."""
+        if self.process:
+            try:
+                self.process.terminate()
+                self.process.wait(timeout=3)
+            except Exception:
+                try:
+                    self.process.kill()
+                except Exception:
+                    pass
+            self.process = None
+
+        self.set_tunnel_url(None, "local")
+        print("[Tunnel] Cloudflare Tunnel stopped.")
+        return self.get_status()
+
+    def generate_pairing_payload(self) -> Dict[str, Any]:
+        status = self.get_status()
         return {
             "app": APP_NAME,
             "local_url": status["local_url"],
@@ -71,9 +158,8 @@ class TunnelService:
             "token": status["pairing_token"]
         }
 
-    @staticmethod
-    def generate_pairing_qr_base64() -> str:
-        payload = TunnelService.generate_pairing_payload()
+    def generate_pairing_qr_base64(self) -> str:
+        payload = self.generate_pairing_payload()
         qr_text = json.dumps(payload)
         
         qr = qrcode.QRCode(

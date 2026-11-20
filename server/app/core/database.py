@@ -107,6 +107,16 @@ def init_db():
         );
         """)
 
+        # AI Photo Embeddings Table (Vector Search)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS photo_embeddings (
+            photo_id TEXT PRIMARY KEY,
+            embedding BLOB NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (photo_id) REFERENCES photos (id) ON DELETE CASCADE
+        );
+        """)
+
         # License State Table
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS license_state (

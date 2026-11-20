@@ -76,6 +76,11 @@ export const getTunnelStatus = async () => {
   return res.data;
 };
 
+export const toggleRemoteTunnel = async () => {
+  const res = await api.post('/system/tunnel/toggle');
+  return res.data;
+};
+
 export const setTunnelUrl = async (publicUrl, provider = 'cloudflare') => {
   const res = await api.post('/system/tunnel', { public_url: publicUrl, provider });
   return res.data;

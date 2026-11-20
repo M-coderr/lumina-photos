@@ -8,13 +8,16 @@ import {
   Check, 
   Copy, 
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  Radio,
+  Zap
 } from 'lucide-react';
-import { getPairingInfo } from '../api';
+import { getPairingInfo, toggleRemoteTunnel } from '../api';
 
 export default function PairingModal({ isOpen, onClose }) {
   const [pairingData, setPairingData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [tunnelLoading, setTunnelLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -35,6 +38,18 @@ export default function PairingModal({ isOpen, onClose }) {
     }
   };
 
+  const handleToggleTunnel = async () => {
+    try {
+      setTunnelLoading(true);
+      await toggleRemoteTunnel();
+      await loadPairing();
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Failed to toggle remote tunnel');
+    } finally {
+      setTunnelLoading(false);
+    }
+  };
+
   const copyUrl = (text) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -44,6 +59,7 @@ export default function PairingModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   const creds = pairingData?.credentials;
+  const isTunnelActive = Boolean(creds?.remote_url);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
@@ -93,14 +109,54 @@ export default function PairingModal({ isOpen, onClose }) {
                 </div>
               </div>
 
-              {/* Instructions */}
-              <div className="bg-neutral-800/60 rounded-2xl p-4 border border-neutral-800 space-y-2 text-xs text-neutral-300">
-                <p className="font-semibold text-white">Quick 3-step mobile setup:</p>
-                <ol className="list-decimal list-inside space-y-1 text-neutral-400">
-                  <li>Open the mobile app or browser on your phone.</li>
-                  <li>Scan this QR Code with your phone camera.</li>
-                  <li>Select phone folders to watch — new photos auto-upload to your PC!</li>
-                </ol>
+              {/* Remote Tunnel (Access from 4G/5G anywhere) */}
+              <div className={`p-4 rounded-2xl border transition-all ${
+                isTunnelActive
+                  ? 'bg-emerald-500/10 border-emerald-500/30'
+                  : 'bg-neutral-800/40 border-neutral-800'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <Globe className={`w-5 h-5 ${isTunnelActive ? 'text-emerald-400' : 'text-blue-400'}`} />
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">
+                        Global Remote Access (4G/5G)
+                      </h4>
+                      <p className="text-[11px] text-neutral-400">
+                        {isTunnelActive
+                          ? 'Zero-config HTTPS tunnel active worldwide'
+                          : 'Currently local Wi-Fi only. Enable to sync away from home.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleToggleTunnel}
+                    disabled={tunnelLoading}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer transition-all ${
+                      isTunnelActive
+                        ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
+                        : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/30'
+                    }`}
+                  >
+                    {tunnelLoading ? 'Connecting...' : isTunnelActive ? 'Turn OFF' : '⚡ Turn ON'}
+                  </button>
+                </div>
+
+                {isTunnelActive && (
+                  <div className="mt-3 pt-3 border-t border-emerald-500/20 flex items-center justify-between text-xs">
+                    <span className="text-emerald-300 font-mono text-[11px] truncate max-w-xs">
+                      {creds?.remote_url}
+                    </span>
+                    <button
+                      onClick={() => copyUrl(creds?.remote_url)}
+                      className="text-neutral-400 hover:text-white flex items-center gap-1 cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>{copied ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Endpoints */}
@@ -121,19 +177,6 @@ export default function PairingModal({ isOpen, onClose }) {
                   >
                     {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   </button>
-                </div>
-
-                {/* Remote Tunnel (if configured) */}
-                <div className="flex items-center justify-between p-3 rounded-xl bg-neutral-800/40 border border-neutral-800">
-                  <div className="flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-blue-400" />
-                    <div>
-                      <p className="font-medium text-white">Remote Access</p>
-                      <p className="text-neutral-400 text-[11px]">
-                        {creds?.remote_url || 'Active on Local Network'}
-                      </p>
-                    </div>
-                  </div>
                 </div>
               </div>
             </>

@@ -65,6 +65,31 @@ def set_tunnel_status(body: SetTunnelRequest):
     tunnel_service.set_tunnel_url(body.public_url, body.provider or "cloudflare")
     return tunnel_service.get_status()
 
+@router.post("/tunnel/start")
+def start_tunnel():
+    """Start automated Cloudflare Quick Tunnel."""
+    try:
+        return tunnel_service.start_tunnel()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/tunnel/stop")
+def stop_tunnel():
+    """Stop active Cloudflare Quick Tunnel."""
+    return tunnel_service.stop_tunnel()
+
+@router.post("/tunnel/toggle")
+def toggle_tunnel():
+    """Toggle remote tunnel ON/OFF."""
+    status = tunnel_service.get_status()
+    if status["is_active"]:
+        return tunnel_service.stop_tunnel()
+    else:
+        try:
+            return tunnel_service.start_tunnel()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/stats")
 def get_system_stats():
     """Retrieve system storage and photo statistics."""

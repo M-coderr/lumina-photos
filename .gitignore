@@ -19,6 +19,10 @@ mobile/node_modules/
 
 # Build artifacts
 web/dist/
+dist/
+build/
+bin/
+*.exe
 .expo/
 *.apk
 *.aab

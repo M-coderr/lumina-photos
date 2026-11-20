@@ -39,7 +39,18 @@ def list_photos(
             params["month"] = month
 
         if search:
-            query += " AND (filename LIKE :search OR camera_make LIKE :search OR camera_model LIKE :search)"
+            matched_ids = []
+            try:
+                from server.app.services.ai_search import ai_search_service
+                matched_ids = ai_search_service.search(search, limit=50)
+            except Exception:
+                pass
+
+            if matched_ids:
+                id_placeholders = ",".join(f"'{pid}'" for pid in matched_ids)
+                query += f" AND (id IN ({id_placeholders}) OR filename LIKE :search OR camera_make LIKE :search OR camera_model LIKE :search)"
+            else:
+                query += " AND (filename LIKE :search OR camera_make LIKE :search OR camera_model LIKE :search)"
             params["search"] = f"%{search}%"
 
         query += " ORDER BY taken_at DESC LIMIT :limit OFFSET :offset;"
@@ -201,3 +212,30 @@ def delete_permanently(photo_id: str):
                     pass
 
         return {"id": photo_id, "deleted": True}
+
+@router.post("/ai/index-all")
+def index_all_photos():
+    """Trigger background embedding generation for all photos without embeddings."""
+    import threading
+    from server.app.services.ai_search import ai_search_service
+    from server.app.core.config import THUMBNAILS_DIR
+
+    def worker():
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+            SELECT p.id, p.thumbnail_preview
+            FROM photos p
+            LEFT JOIN photo_embeddings pe ON p.id = pe.photo_id
+            WHERE pe.photo_id IS NULL AND p.is_trashed = 0;
+            """)
+            missing = cursor.fetchall()
+            print(f"[AI Search] Indexing {len(missing)} photos for semantic search...")
+            for row in missing:
+                t_path = THUMBNAILS_DIR / row["thumbnail_preview"]
+                if t_path.exists():
+                    ai_search_service.index_photo(row["id"], t_path)
+            print("[AI Search] Finished background indexing.")
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"status": "indexing_started"}
