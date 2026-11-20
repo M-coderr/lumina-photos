@@ -24,5 +24,5 @@ echo.
 echo [Desktop] Lumina Photos is running in the background!
 echo Look for the Lumina icon in your Windows System Tray (near the clock).
 echo.
-timeout /t 3 >nul
+ping 127.0.0.1 -n 3 >nul
 exit
