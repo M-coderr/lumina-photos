@@ -32,8 +32,13 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Configure Android SDK
+        run: |
+          echo "sdk.dir=/usr/local/lib/android/sdk" > mobile/android/local.properties
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Install dependencies in mobile
         run: |
@@ -44,11 +49,11 @@ jobs:
         run: |
           cd mobile/android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
       - name: Rename APK
         run: |
-          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk LuminaPhotos.apk
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk LuminaPhotos.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -58,7 +63,7 @@ jobs:
 
       - name: Release APK
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         with:
           tag_name: v1.0.0-apk
           name: "Lumina Photos Android APK v1.0.0"
@@ -70,5 +75,6 @@ jobs:
             2. Tap the downloaded file to install (allow "Install from unknown sources" if prompted).
             3. Open the app and tap **"📷 Scan PC Screen QR Code"** to pair with your PC!
           files: LuminaPhotos.apk
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
