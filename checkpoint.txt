@@ -99,6 +99,14 @@ Branch: main
         Active, Trial, Paused, and Expired states with live paywall warning banners.
     - Compiled into web/dist and served directly by the FastAPI backend on port 8000.
 
+[✔] Standalone Android APK (.apk) Cloud Build Pipeline
+    - Native Android Gradle project generated and configured (mobile/android).
+    - Aligned Kotlin 1.9.25 and Compose compiler 1.5.15 toolchain.
+    - Automated GitHub Actions cloud CI/CD (.github/workflows/build-apk.yml)
+      compiling release standalone APK with embedded Hermes JavaScript bundle.
+    - Public GitHub Release published with downloadable installable LuminaPhotos.apk.
+    - Local copy downloaded: LuminaPhotos.apk (81.7 MB).
+
 --------------------------------------------------------------------------------
 2. PENDING TASKS & UPCOMING ROADMAP
 --------------------------------------------------------------------------------
@@ -114,9 +122,9 @@ Branch: main
       * Web dashboard for the creator to monitor active servers and toggle
         the "Switch" on any user account.
 
-[ ] Phase 3: Mobile App Store Packaging (Android & iOS)
-    - Generate Android production build (.apk / .aab) via Expo EAS Build.
-    - Submit to Google Play Store & Apple App Store.
+[ ] Phase 3: Mobile App Store Packaging (Google Play Store & Apple App Store)
+    - Production app-store signing (.aab for Google Play Store).
+    - iOS CocoaPods & Xcode project build for App Store submission.
 
 [ ] Phase 4: Additional AI Features
     - Offline Facial Recognition & People Clustering (InsightFace):
