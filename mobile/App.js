@@ -14,7 +14,9 @@ import {
   Dimensions,
   RefreshControl,
   ScrollView,
+  Alert,
 } from 'react-native';
+import { CameraView, Camera } from 'expo-camera';
 import { MobileSyncEngine } from './src/services/syncWorker';
 import { getMobileTimeline, getMobileStats, toggleMobileFavorite } from './src/services/api';
 
@@ -28,6 +30,7 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
   const [isPairModalOpen, setIsPairModalOpen] = useState(false);
+  const [isScanningQR, setIsScanningQR] = useState(false);
   const [serverUrlInput, setServerUrlInput] = useState('');
   const [activePhoto, setActivePhoto] = useState(null);
   const [activeTab, setActiveTab] = useState('photos'); // 'photos', 'folders', 'settings'
@@ -84,15 +87,53 @@ export default function App() {
     }
   };
 
+  const handleBarcodeScanned = async ({ data }) => {
+    if (!data) return;
+    try {
+      let url = null;
+      let token = 'mobile-pair-token';
+
+      // Check if data is JSON payload from PC QR code
+      if (data.startsWith('{')) {
+        const payload = JSON.parse(data);
+        url = payload.primary_url || payload.remote_url || payload.local_url;
+        token = payload.token || token;
+      } else if (data.startsWith('http://') || data.startsWith('https://')) {
+        url = data;
+      }
+
+      if (url) {
+        setIsScanningQR(false);
+        setIsPairModalOpen(false);
+        await MobileSyncEngine.pairWithServer(url, token);
+        setPairedServer(url);
+        Alert.alert('Connected!', `Paired successfully with your PC server at:\n${url}`);
+        await loadTimeline(url);
+      }
+    } catch (err) {
+      console.log('QR parse error:', err);
+    }
+  };
+
+  const handleStartQRScan = async () => {
+    const { status } = await Camera.requestCameraPermissionsAsync();
+    if (status === 'granted') {
+      setIsScanningQR(true);
+    } else {
+      Alert.alert('Camera Permission', 'Please grant camera access to scan the pairing QR code.');
+    }
+  };
+
   const handleManualPair = async () => {
     if (!serverUrlInput.trim()) return;
     try {
-      await MobileSyncEngine.pairWithServer(serverUrlInput.trim(), 'mobile-client-token');
-      setPairedServer(serverUrlInput.trim());
+      const cleanUrl = serverUrlInput.trim().replace(/\/+$/, '');
+      await MobileSyncEngine.pairWithServer(cleanUrl, 'mobile-client-token');
+      setPairedServer(cleanUrl);
       setIsPairModalOpen(false);
-      await loadTimeline();
+      await loadTimeline(cleanUrl);
     } catch (e) {
-      alert(e.message);
+      Alert.alert('Connection Failed', e.message);
     }
   };
 
@@ -123,8 +164,8 @@ export default function App() {
           </View>
           <View>
             <Text style={styles.headerTitle}>Lumina Photos</Text>
-            <Text style={styles.headerSubtitle}>
-              {pairedServer ? 'Connected to PC Server' : 'Not paired'}
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
+              {pairedServer ? `PC: ${pairedServer.replace(/^https?:\/\//, '')}` : 'Not connected'}
             </Text>
           </View>
         </View>
@@ -202,12 +243,13 @@ export default function App() {
         <ScrollView style={styles.folderContainer}>
           <Text style={styles.sectionTitle}>Auto-Detected Phone Folders</Text>
           <Text style={styles.sectionDesc}>
-            Lumina automatically monitors these folders and syncs new photos in the background to your home PC.
+            Lumina monitors these folders and syncs new photos in the background to your PC.
           </Text>
 
           {['Camera (DCIM)', 'WhatsApp Images', 'Screenshots', 'Downloads', 'Instagram'].map(
             (folderName) => {
-              const isChecked = watchedFolders.includes(folderName.split(' ')[0]);
+              const prefix = folderName.split(' ')[0];
+              const isChecked = watchedFolders.includes(prefix);
               return (
                 <View key={folderName} style={styles.folderCard}>
                   <View style={{ flex: 1 }}>
@@ -219,7 +261,6 @@ export default function App() {
                   <TouchableOpacity
                     style={[styles.checkBtn, isChecked && styles.checkBtnActive]}
                     onPress={() => {
-                      const prefix = folderName.split(' ')[0];
                       if (isChecked) {
                         setWatchedFolders(watchedFolders.filter((f) => f !== prefix));
                       } else {
@@ -269,7 +310,7 @@ export default function App() {
         </TouchableOpacity>
       </View>
 
-      {/* Lightbox / Fullscreen Viewer Modal */}
+      {/* Fullscreen Photo Viewer */}
       {activePhoto && (
         <Modal
           visible={!!activePhoto}
@@ -322,44 +363,91 @@ export default function App() {
         </Modal>
       )}
 
-      {/* Pairing Modal */}
+      {/* Pairing Modal (QR Camera Scanner + Manual Fallback) */}
       <Modal
         visible={isPairModalOpen}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setIsPairModalOpen(false)}
+        onRequestClose={() => {
+          setIsScanningQR(false);
+          setIsPairModalOpen(false);
+        }}
       >
         <View style={styles.pairModalWrapper}>
           <View style={styles.pairModalCard}>
-            <Text style={styles.pairTitle}>Pair with PC Server</Text>
+            <Text style={styles.pairTitle}>Connect to Your PC</Text>
             <Text style={styles.pairDesc}>
-              Scan the QR Code on your PC or enter your PC server IP:
+              Pair your phone with your PC server to automatically back up your photos.
             </Text>
 
-            <TextInput
-              style={styles.urlInput}
-              placeholder="e.g. http://192.168.1.21:8000"
-              placeholderTextColor="#666"
-              value={serverUrlInput}
-              onChangeText={setServerUrlInput}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+            {/* QR Camera Scanner View */}
+            {isScanningQR ? (
+              <View style={styles.scannerWrapper}>
+                <CameraView
+                  style={StyleSheet.absoluteFillObject}
+                  barcodeScannerSettings={{
+                    barcodeTypes: ['qr'],
+                  }}
+                  onBarcodeScanned={handleBarcodeScanned}
+                />
+                <View style={styles.reticleOverlay}>
+                  <View style={styles.reticleSquare} />
+                  <Text style={styles.reticleText}>Point at the QR code on your PC screen</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.cancelScanBtn}
+                  onPress={() => setIsScanningQR(false)}
+                >
+                  <Text style={{ color: '#fff', fontSize: 12 }}>Close Camera</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                {/* 1-Tap QR Scan Button */}
+                <TouchableOpacity
+                  style={styles.scanQrBigBtn}
+                  onPress={handleStartQRScan}
+                >
+                  <Text style={{ fontSize: 24, marginRight: 10 }}>📷</Text>
+                  <View>
+                    <Text style={styles.scanQrBigBtnText}>Scan PC Screen QR Code</Text>
+                    <Text style={styles.scanQrBigBtnSub}>Instant 1-second pairing</Text>
+                  </View>
+                </TouchableOpacity>
 
-            <View style={styles.pairActions}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => setIsPairModalOpen(false)}
-              >
-                <Text style={{ color: '#aaa' }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.savePairBtn}
-                onPress={handleManualPair}
-              >
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Connect & Pair</Text>
-              </TouchableOpacity>
-            </View>
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR ENTER ADDRESS</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                {/* Manual URL Input */}
+                <TextInput
+                  style={styles.urlInput}
+                  placeholder="e.g. http://192.168.1.21:8000"
+                  placeholderTextColor="#666"
+                  value={serverUrlInput}
+                  onChangeText={setServerUrlInput}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                <View style={styles.pairActions}>
+                  <TouchableOpacity
+                    style={styles.cancelBtn}
+                    onPress={() => setIsPairModalOpen(false)}
+                  >
+                    <Text style={{ color: '#aaa' }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.savePairBtn}
+                    onPress={handleManualPair}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Connect</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -584,16 +672,17 @@ const styles = StyleSheet.create({
   },
   pairModalWrapper: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
     padding: 20,
   },
   pairModalCard: {
     backgroundColor: '#18181b',
-    borderRadius: 24,
+    borderRadius: 28,
     padding: 24,
     borderWidth: 1,
     borderColor: '#27272a',
+    overflow: 'hidden',
   },
   pairTitle: {
     color: '#fff',
@@ -603,8 +692,46 @@ const styles = StyleSheet.create({
   pairDesc: {
     color: '#a1a1aa',
     fontSize: 12,
-    marginTop: 6,
+    marginTop: 4,
+    marginBottom: 20,
+  },
+  scanQrBigBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2563eb',
+    padding: 14,
+    borderRadius: 16,
     marginBottom: 16,
+    shadowColor: '#2563eb',
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+  },
+  scanQrBigBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  scanQrBigBtnSub: {
+    color: '#bfdbfe',
+    fontSize: 11,
+    marginTop: 1,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#27272a',
+  },
+  dividerText: {
+    color: '#71717a',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginHorizontal: 10,
+    letterSpacing: 0.5,
   },
   urlInput: {
     backgroundColor: '#27272a',
@@ -612,7 +739,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     fontSize: 13,
-    marginBottom: 20,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#3f3f46',
   },
@@ -626,9 +753,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   savePairBtn: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#3f3f46',
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 12,
+  },
+  scannerWrapper: {
+    height: 280,
+    borderRadius: 20,
+    overflow: 'hidden',
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reticleOverlay: {
+    alignItems: 'center',
+  },
+  reticleSquare: {
+    width: 180,
+    height: 180,
+    borderWidth: 2,
+    borderColor: '#60a5fa',
+    borderRadius: 16,
+    backgroundColor: 'rgba(96, 165, 250, 0.05)',
+  },
+  reticleText: {
+    color: '#fff',
+    fontSize: 11,
+    marginTop: 12,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  cancelScanBtn: {
+    position: 'absolute',
+    bottom: 12,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
 });
